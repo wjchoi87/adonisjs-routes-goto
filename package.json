@@ -3,6 +3,7 @@
   "displayName": "AdonisJS Routes Goto",
   "description": "Go to Definition for AdonisJS v6 routes",
   "version": "0.0.1",
+  "publisher": "wjchoi87",
   "repository": {
     "type": "git",
     "url": "https://github.com/wjchoi87/adonisjs-routes-goto"
