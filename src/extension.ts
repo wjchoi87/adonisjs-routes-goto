@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { AdonisRoutesDefinitionProvider } from './definitionProvider';
 
 export function activate(context: vscode.ExtensionContext) {
+  console.log('AdonisJS Routes Goto extension activated!');
+
   const provider = new AdonisRoutesDefinitionProvider();
 
   // Register for routes/**/*.ts files
@@ -19,6 +21,8 @@ export function activate(context: vscode.ExtensionContext) {
       provider
     )
   );
+
+  console.log('Definition providers registered for routes files');
 }
 
 export function deactivate() {}

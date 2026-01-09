@@ -13,6 +13,8 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     token: vscode.CancellationToken
   ): vscode.ProviderResult<vscode.Definition | vscode.DefinitionLink[]> {
     try {
+      console.log('provideDefinition called for file:', document.fileName, 'position:', position);
+
       const filePath = document.fileName;
       const offset = document.offsetAt(position);
       const sourceFile = ts.createSourceFile(
@@ -23,18 +25,34 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
       );
 
       const node = this.findNodeAtPosition(sourceFile, offset);
-      if (!node) return null;
+      console.log('Node at position:', node?.kind, node?.getText());
+      if (!node) {
+        console.log('No node found at position');
+        return null;
+      }
 
       // Check if we're in a supported file pattern
-      if (!this.isSupportedFile(filePath)) return null;
+      if (!this.isSupportedFile(filePath)) {
+        console.log('File not supported:', filePath);
+        return null;
+      }
+      console.log('File supported, checking project root...');
 
       const projectRoot = this.findProjectRoot(filePath);
-      if (!projectRoot) return null;
+      console.log('Project root found:', projectRoot);
+      if (!projectRoot) {
+        console.log('No project root found');
+        return null;
+      }
 
-      // Determine what was clicked
       const clickContext = this.analyzeClickContext(node, sourceFile);
-      if (!clickContext) return null;
+      console.log('Click context analyzed:', clickContext);
+      if (!clickContext) {
+        console.log('No click context found');
+        return null;
+      }
 
+      console.log('Resolving definition...');
       return this.resolveDefinition(clickContext, projectRoot, sourceFile);
     } catch (error) {
       console.error('AdonisJS Routes Goto Error:', error);
