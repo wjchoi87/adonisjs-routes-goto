@@ -1,9 +1,11 @@
-import * as vscode from 'vscode';
-import * as ts from 'typescript';
-import * as path from 'path';
-import * as fs from 'fs';
+import * as vscode from "vscode";
+import * as ts from "typescript";
+import * as path from "path";
+import * as fs from "fs";
 
-export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider {
+export class AdonisRoutesDefinitionProvider
+  implements vscode.DefinitionProvider
+{
   private importsCache = new Map<string, any>();
   private cacheTimestamps = new Map<string, number>();
 
@@ -13,7 +15,12 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     token: vscode.CancellationToken
   ): vscode.ProviderResult<vscode.Definition | vscode.DefinitionLink[]> {
     try {
-      console.log('provideDefinition called for file:', document.fileName, 'position:', position);
+      console.log(
+        "provideDefinition called for file:",
+        document.fileName,
+        "position:",
+        position
+      );
 
       const filePath = document.fileName;
       const offset = document.offsetAt(position);
@@ -25,51 +32,53 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
       );
 
       const node = this.findNodeAtPosition(sourceFile, offset);
-      console.log('Node at position:', node?.kind, node?.getText());
+      console.log("Node at position:", node?.kind, node?.getText());
       if (!node) {
-        console.log('No node found at position');
+        console.log("No node found at position");
         return null;
       }
 
       // Check if we're in a supported file pattern
       if (!this.isSupportedFile(filePath)) {
-        console.log('File not supported:', filePath);
+        console.log("File not supported:", filePath);
         return null;
       }
-      console.log('File supported, checking project root...');
+      console.log("File supported, checking project root...");
 
       const projectRoot = this.findProjectRoot(filePath);
-      console.log('Project root found:', projectRoot);
+      console.log("Project root found:", projectRoot);
       if (!projectRoot) {
-        console.log('No project root found');
+        console.log("No project root found");
         return null;
       }
 
       const clickContext = this.analyzeClickContext(node, sourceFile);
-      console.log('Click context analyzed:', clickContext);
+      console.log("Click context analyzed:", clickContext);
       if (!clickContext) {
-        console.log('No click context found');
+        console.log("No click context found");
         return null;
       }
 
-      console.log('Resolving definition...');
+      console.log("Resolving definition...");
       return this.resolveDefinition(clickContext, projectRoot, sourceFile);
     } catch (error) {
-      console.error('AdonisJS Routes Goto Error:', error);
+      console.error("AdonisJS Routes Goto Error:", error);
       return null;
     }
   }
 
   private isSupportedFile(filePath: string): boolean {
     const normalizedPath = path.normalize(filePath);
-    return normalizedPath.includes(path.sep + 'routes' + path.sep) ||
-           normalizedPath.endsWith(path.sep + 'start' + path.sep + 'routes.ts');
+    return (
+      normalizedPath.includes(path.sep + "routes" + path.sep) ||
+      normalizedPath.endsWith(path.sep + "start" + path.sep + "routes.ts")
+    );
   }
 
   private findProjectRoot(filePath: string): string | null {
     let currentDir = path.dirname(filePath);
     while (currentDir !== path.dirname(currentDir)) {
-      const packageJsonPath = path.join(currentDir, 'package.json');
+      const packageJsonPath = path.join(currentDir, "package.json");
       if (fs.existsSync(packageJsonPath)) {
         return currentDir;
       }
@@ -78,7 +87,10 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     return null;
   }
 
-  private findNodeAtPosition(sourceFile: ts.SourceFile, position: number): ts.Node | null {
+  private findNodeAtPosition(
+    sourceFile: ts.SourceFile,
+    position: number
+  ): ts.Node | null {
     function find(node: ts.Node): ts.Node | null {
       if (position >= node.getStart() && position <= node.getEnd()) {
         for (const child of node.getChildren()) {
@@ -92,7 +104,10 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     return find(sourceFile);
   }
 
-  private analyzeClickContext(node: ts.Node, sourceFile: ts.SourceFile): ClickContext | null {
+  private analyzeClickContext(
+    node: ts.Node,
+    sourceFile: ts.SourceFile
+  ): ClickContext | null {
     // Check if it's an identifier
     if (ts.isIdentifier(node)) {
       return this.analyzeIdentifierClick(node, sourceFile);
@@ -106,16 +121,19 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     return null;
   }
 
-  private analyzeIdentifierClick(node: ts.Identifier, sourceFile: ts.SourceFile): ClickContext | null {
+  private analyzeIdentifierClick(
+    node: ts.Identifier,
+    sourceFile: ts.SourceFile
+  ): ClickContext | null {
     // Check if this identifier is part of a router call handler
     const routerCall = this.findRouterCall(node);
     if (routerCall) {
       const handler = this.extractHandlerFromRouterCall(routerCall);
-      if (handler && handler.type === 'controller') {
+      if (handler && handler.type === "controller") {
         return {
-          type: 'controller_variable',
+          type: "controller_variable",
           variableName: handler.controllerName,
-          methodName: handler.methodName
+          methodName: handler.methodName,
         };
       }
     }
@@ -124,30 +142,33 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     const routesGroup = this.findRoutesGroupCall(node);
     if (routesGroup) {
       return {
-        type: 'routes_module',
-        moduleName: node.text
+        type: "routes_module",
+        moduleName: node.text,
       };
     }
 
     return null;
   }
 
-  private analyzeStringLiteralClick(node: ts.StringLiteral, sourceFile: ts.SourceFile): ClickContext | null {
+  private analyzeStringLiteralClick(
+    node: ts.StringLiteral,
+    sourceFile: ts.SourceFile
+  ): ClickContext | null {
     // Check if this string is a method name in [Controller, 'method'] tuple
     const tupleContext = this.isMethodStringInTuple(node);
     if (tupleContext) {
       return {
-        type: 'method_string',
+        type: "method_string",
         controllerName: tupleContext.controllerName,
-        methodName: node.text
+        methodName: node.text,
       };
     }
 
     // Check if this string is a #controllers import path
-    if (node.text.startsWith('#controllers/')) {
+    if (node.text.startsWith("#controllers/")) {
       return {
-        type: 'controller_import_path',
-        importPath: node.text
+        type: "controller_import_path",
+        importPath: node.text,
       };
     }
 
@@ -157,9 +178,23 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
   private findRouterCall(node: ts.Node): ts.CallExpression | null {
     let current: ts.Node = node;
     while (current) {
-      if (ts.isCallExpression(current) && ts.isPropertyAccessExpression(current.expression)) {
+      if (
+        ts.isCallExpression(current) &&
+        ts.isPropertyAccessExpression(current.expression)
+      ) {
         const methodName = current.expression.name.text;
-        if (['get', 'post', 'put', 'patch', 'delete', 'route', 'resource', 'group'].includes(methodName)) {
+        if (
+          [
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "route",
+            "resource",
+            "group",
+          ].includes(methodName)
+        ) {
           return current;
         }
       }
@@ -168,7 +203,9 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     return null;
   }
 
-  private extractHandlerFromRouterCall(call: ts.CallExpression): HandlerInfo | null {
+  private extractHandlerFromRouterCall(
+    call: ts.CallExpression
+  ): HandlerInfo | null {
     // Handle method calls like router.get('/path', handler)
     if (call.arguments.length >= 2) {
       const handlerArg = call.arguments[1];
@@ -196,9 +233,9 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
 
       if (ts.isIdentifier(controllerExpr) && ts.isStringLiteral(methodExpr)) {
         return {
-          type: 'controller',
+          type: "controller",
           controllerName: controllerExpr.text,
-          methodName: methodExpr.text
+          methodName: methodExpr.text,
         };
       }
     }
@@ -212,20 +249,26 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     if (ts.isIdentifier(arg)) {
       // This might be a controller factory variable
       return {
-        type: 'controller_variable',
-        variableName: arg.text
+        type: "controller_variable",
+        variableName: arg.text,
       };
     }
 
     return null;
   }
 
-  private isMethodStringInTuple(node: ts.StringLiteral): { controllerName: string } | null {
+  private isMethodStringInTuple(
+    node: ts.StringLiteral
+  ): { controllerName: string } | null {
     let current: ts.Node = node;
     while (current) {
-      if (ts.isArrayLiteralExpression(current) && current.elements.length === 2) {
+      if (
+        ts.isArrayLiteralExpression(current) &&
+        current.elements.length === 2
+      ) {
         const index = current.elements.indexOf(node as ts.Expression);
-        if (index === 1) { // Second element in [Controller, 'method']
+        if (index === 1) {
+          // Second element in [Controller, 'method']
           const controllerExpr = current.elements[0];
           if (ts.isIdentifier(controllerExpr)) {
             return { controllerName: controllerExpr.text };
@@ -240,8 +283,11 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
   private findRoutesGroupCall(node: ts.Node): ts.CallExpression | null {
     let current: ts.Node = node;
     while (current) {
-      if (ts.isCallExpression(current) && ts.isPropertyAccessExpression(current.expression)) {
-        if (current.expression.name.text === 'group') {
+      if (
+        ts.isCallExpression(current) &&
+        ts.isPropertyAccessExpression(current.expression)
+      ) {
+        if (current.expression.name.text === "group") {
           return current;
         }
       }
@@ -250,179 +296,229 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     return null;
   }
 
-  private resolveDefinition(context: ClickContext, projectRoot: string, sourceFile: ts.SourceFile): vscode.Location | null {
-    console.log('Resolving definition for context:', context);
+  private resolveDefinition(
+    context: ClickContext,
+    projectRoot: string,
+    sourceFile: ts.SourceFile
+  ): vscode.Location | null {
+    console.log("Resolving definition for context:", context);
 
     switch (context.type) {
-      case 'controller_variable':
+      case "controller_variable":
         if (!context.variableName) {
-          console.log('No variable name for controller variable');
+          console.log("No variable name for controller variable");
           return null;
         }
-        console.log('Resolving controller variable definition...');
-        return this.resolveControllerVariableDefinition(context.variableName, context.methodName, projectRoot, sourceFile);
+        console.log("Resolving controller variable definition...");
+        return this.resolveControllerVariableDefinition(
+          context.variableName,
+          context.methodName,
+          projectRoot,
+          sourceFile
+        );
 
-      case 'method_string':
+      case "method_string":
         if (!context.controllerName) {
-          console.log('No controller name for method string');
+          console.log("No controller name for method string");
           return null;
         }
-        console.log('Resolving method string definition...');
-        return this.resolveControllerDefinition(context.controllerName, context.methodName, projectRoot);
+        console.log("Resolving method string definition...");
+        return this.resolveControllerDefinition(
+          context.controllerName,
+          context.methodName,
+          projectRoot
+        );
 
-      case 'controller_import_path':
+      case "controller_import_path":
         if (!context.importPath) {
-          console.log('No import path');
+          console.log("No import path");
           return null;
         }
-        console.log('Resolving controller import path...');
-        return this.resolveControllerFromImportPath(context.importPath, projectRoot);
+        console.log("Resolving controller import path...");
+        return this.resolveControllerFromImportPath(
+          context.importPath,
+          projectRoot
+        );
 
-      case 'routes_module':
+      case "routes_module":
         if (!context.moduleName) {
-          console.log('No module name');
+          console.log("No module name");
           return null;
         }
-        console.log('Resolving routes module...');
-        return this.resolveRoutesModule(context.moduleName, projectRoot, sourceFile);
+        console.log("Resolving routes module...");
+        return this.resolveRoutesModule(
+          context.moduleName,
+          projectRoot,
+          sourceFile
+        );
 
       default:
-        console.log('Unknown context type:', context.type);
+        console.log("Unknown context type:", context.type);
         return null;
     }
   }
 
-  private resolveControllerVariableDefinition(variableName: string, methodName: string | undefined, projectRoot: string, sourceFile: ts.SourceFile): vscode.Location | null {
-    console.log(`Resolving controller variable: ${variableName}, method: ${methodName}`);
+  private resolveControllerVariableDefinition(
+    variableName: string,
+    methodName: string | undefined,
+    projectRoot: string,
+    sourceFile: ts.SourceFile
+  ): vscode.Location | null {
+    console.log(
+      `Resolving controller variable: ${variableName}, method: ${methodName}`
+    );
 
     // Find the variable declaration in the source file
     const importPath = this.findControllerImportPath(variableName, sourceFile);
-    console.log('Import path found:', importPath);
+    console.log("Import path found:", importPath);
 
     if (!importPath) {
-      console.log('No import path found for variable');
+      console.log("No import path found for variable");
       return null;
     }
 
     // Resolve the import path to actual file path
-    const location = this.resolveControllerFromImportPath(importPath, projectRoot);
+    const location = this.resolveControllerFromImportPath(
+      importPath,
+      projectRoot
+    );
     if (!location) {
-      console.log('Controller path not found');
+      console.log("Controller path not found");
       return null;
     }
 
     // Extract file path from location
     const controllerPath = location.uri.fsPath;
-    const controllerDocument = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === controllerPath);
-    console.log('Controller document found:', !!controllerDocument);
-
-    if (!controllerDocument) return location;
+    const controllerDocument = vscode.workspace.textDocuments.find(
+      (doc) => doc.uri.fsPath === controllerPath
+    );
+    console.log("Controller document found:", !!controllerDocument);
 
     if (!methodName) {
-      console.log('No method name specified, returning controller file location');
+      console.log(
+        "No method name specified, returning controller file location"
+      );
       return new vscode.Location(location.uri, new vscode.Position(0, 0));
     }
 
-    // Find method definition
-    console.log('Finding method in controller...');
-    const methodLocation = this.findMethodInController(controllerDocument, methodName);
-    console.log('Method location found:', !!methodLocation);
+    // Find method definition (works even if the controller file isn't already open)
+    console.log("Finding method in controller...");
+    const methodLocation = controllerDocument
+      ? this.findMethodInController(controllerDocument, methodName)
+      : this.findMethodInControllerFile(controllerPath, methodName);
+    console.log("Method location found:", !!methodLocation);
 
-    return methodLocation || new vscode.Location(location.uri, new vscode.Position(0, 0));
+    return (
+      methodLocation ||
+      new vscode.Location(location.uri, new vscode.Position(0, 0))
+    );
   }
 
-  private resolveControllerDefinition(controllerName: string, methodName: string | undefined, projectRoot: string): vscode.Location | null {
-    console.log(`Resolving controller: ${controllerName}, method: ${methodName}, root: ${projectRoot}`);
+  private resolveControllerDefinition(
+    controllerName: string,
+    methodName: string | undefined,
+    projectRoot: string
+  ): vscode.Location | null {
+    console.log(
+      `Resolving controller: ${controllerName}, method: ${methodName}, root: ${projectRoot}`
+    );
 
-    const controllerPath = this.resolveControllerPath(controllerName, projectRoot);
-    console.log('Controller path resolved to:', controllerPath);
+    const controllerPath = this.resolveControllerPath(
+      controllerName,
+      projectRoot
+    );
+    console.log("Controller path resolved to:", controllerPath);
 
     if (!controllerPath) {
-      console.log('Controller path not found');
+      console.log("Controller path not found");
       return null;
     }
 
     const controllerUri = vscode.Uri.file(controllerPath);
-    const controllerDocument = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === controllerPath);
-    console.log('Controller document found:', !!controllerDocument);
-
-    if (!controllerDocument) return new vscode.Location(controllerUri, new vscode.Position(0, 0));
 
     if (!methodName) {
-      console.log('No method name specified, returning controller file location');
+      console.log(
+        "No method name specified, returning controller file location"
+      );
       return new vscode.Location(controllerUri, new vscode.Position(0, 0));
     }
 
-    // Find method definition
-    console.log('Finding method in controller...');
-    const methodLocation = this.findMethodInController(controllerDocument, methodName);
-    console.log('Method location found:', !!methodLocation);
+    console.log("Finding method in controller...");
+    const methodLocation = this.findMethodInControllerFile(
+      controllerPath,
+      methodName
+    );
+    console.log("Method location found:", !!methodLocation);
 
-    return methodLocation || new vscode.Location(controllerUri, new vscode.Position(0, 0));
+    return (
+      methodLocation ||
+      new vscode.Location(controllerUri, new vscode.Position(0, 0))
+    );
   }
 
-  private resolveControllerPath(controllerName: string, projectRoot: string): string | null {
+  private resolveControllerPath(
+    controllerName: string,
+    projectRoot: string
+  ): string | null {
     console.log(`Resolving controller path for: ${controllerName}`);
 
     const imports = this.getPackageImports(projectRoot);
-    console.log('Package imports:', imports);
+    console.log("Package imports:", imports);
 
-    const controllersMapping = imports['#controllers/*'];
-    console.log('Controllers mapping:', controllersMapping);
+    const controllersMapping = imports["#controllers/*"];
+    console.log("Controllers mapping:", controllersMapping);
 
     if (!controllersMapping) {
-      console.log('No #controllers/* mapping found');
+      console.log("No #controllers/* mapping found");
       return null;
     }
 
-    // Handle mappings like './app/controllers/*.js' -> './app/controllers'
     let mappingPath = controllersMapping;
-    // First remove the /* pattern
-    if (mappingPath.includes('/*')) {
-      mappingPath = mappingPath.replace('/*', '');
+    if (mappingPath.includes("/*")) {
+      mappingPath = mappingPath.substring(0, mappingPath.indexOf("/*"));
     }
-    // Then remove any remaining * patterns (like *.js)
-    mappingPath = mappingPath.replace(/\*\.[a-zA-Z0-9]+$/, '');
 
     const basePath = path.resolve(projectRoot, mappingPath);
-    console.log('Base path:', basePath);
+    console.log("Base path:", basePath);
 
     // Convert PascalCase to snake_case (e.g., BannerController -> banner_controller)
-    const snakeCaseName = controllerName.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
-    console.log('Converted to snake_case:', snakeCaseName);
+    const snakeCaseName = controllerName
+      .replace(/([a-z])([A-Z])/g, "$1_$2")
+      .toLowerCase();
+    console.log("Converted to snake_case:", snakeCaseName);
 
     const possiblePaths = [
       path.join(basePath, `${snakeCaseName}.ts`),
       path.join(basePath, `${snakeCaseName}.js`),
-      path.join(basePath, controllerName, 'index.ts'),
-      path.join(basePath, controllerName, 'index.js'),
+      path.join(basePath, controllerName, "index.ts"),
+      path.join(basePath, controllerName, "index.js"),
       // Also try PascalCase just in case
       path.join(basePath, `${controllerName}.ts`),
-      path.join(basePath, `${controllerName}.js`)
+      path.join(basePath, `${controllerName}.js`),
     ];
 
-    console.log('Possible paths:', possiblePaths);
+    console.log("Possible paths:", possiblePaths);
 
     for (const p of possiblePaths) {
       console.log(`Checking path: ${p}, exists: ${fs.existsSync(p)}`);
       if (fs.existsSync(p)) {
-        console.log('Found controller file:', p);
+        console.log("Found controller file:", p);
         return p;
       }
     }
 
-    console.log('No controller file found');
+    console.log("No controller file found");
     return null;
   }
 
   private getPackageImports(projectRoot: string): any {
-    const packageJsonPath = path.join(projectRoot, 'package.json');
+    const packageJsonPath = path.join(projectRoot, "package.json");
     const stat = fs.statSync(packageJsonPath);
     const cacheKey = packageJsonPath;
 
     if (this.cacheTimestamps.get(cacheKey) !== stat.mtime.getTime()) {
       try {
-        const content = fs.readFileSync(packageJsonPath, 'utf8');
+        const content = fs.readFileSync(packageJsonPath, "utf8");
         const packageJson = JSON.parse(content);
         this.importsCache.set(cacheKey, packageJson.imports || {});
         this.cacheTimestamps.set(cacheKey, stat.mtime.getTime());
@@ -434,7 +530,10 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     return this.importsCache.get(cacheKey) || {};
   }
 
-  private findMethodInController(document: vscode.TextDocument, methodName: string): vscode.Location | null {
+  private findMethodInController(
+    document: vscode.TextDocument,
+    methodName: string
+  ): vscode.Location | null {
     const sourceFile = ts.createSourceFile(
       document.fileName,
       document.getText(),
@@ -442,17 +541,32 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
       true
     );
 
-    const candidates: { node: ts.MethodDeclaration | ts.FunctionDeclaration, priority: number }[] = [];
+    const candidates: {
+      node: ts.MethodDeclaration | ts.FunctionDeclaration;
+      priority: number;
+    }[] = [];
 
     function visit(node: ts.Node) {
-      if (ts.isMethodDeclaration(node) && node.name && ts.isIdentifier(node.name) && node.name.text === methodName) {
+      if (
+        ts.isMethodDeclaration(node) &&
+        node.name &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === methodName
+      ) {
         let priority = 2; // Default priority
 
         // Check if it's in export default class
         let parent: ts.Node = node.parent;
         while (parent) {
-          if (ts.isClassDeclaration(parent) && parent.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword) &&
-              parent.modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword)) {
+          if (
+            ts.isClassDeclaration(parent) &&
+            parent.modifiers?.some(
+              (m) => m.kind === ts.SyntaxKind.ExportKeyword
+            ) &&
+            parent.modifiers?.some(
+              (m) => m.kind === ts.SyntaxKind.DefaultKeyword
+            )
+          ) {
             priority = 1; // Highest priority
             break;
           }
@@ -466,8 +580,13 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
         candidates.push({ node, priority });
       }
 
-      if (ts.isFunctionDeclaration(node) && node.name && ts.isIdentifier(node.name) && node.name.text === methodName &&
-          node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) {
+      if (
+        ts.isFunctionDeclaration(node) &&
+        node.name &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === methodName &&
+        node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+      ) {
         candidates.push({ node, priority: 3 }); // Exported function
       }
 
@@ -483,41 +602,165 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
 
     const bestMatch = candidates[0];
     if (!bestMatch.node.name) return null;
-    const position = document.positionAt(bestMatch.node.name.getStart());
-    return new vscode.Location(document.uri, position);
+    const start = document.positionAt(bestMatch.node.name.getStart(sourceFile));
+    const end = document.positionAt(bestMatch.node.name.getEnd());
+    return new vscode.Location(document.uri, new vscode.Range(start, end));
   }
 
-  private resolveControllerFromImportPath(importPath: string, projectRoot: string): vscode.Location | null {
+  private findMethodInControllerFile(
+    controllerPath: string,
+    methodName: string
+  ): vscode.Location | null {
+    try {
+      const text = fs.readFileSync(controllerPath, "utf8");
+      const sourceFile = ts.createSourceFile(
+        controllerPath,
+        text,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      const best = this.findBestMethodNameNode(sourceFile, methodName);
+      if (!best) return null;
+
+      const startLc = ts.getLineAndCharacterOfPosition(
+        sourceFile,
+        best.getStart(sourceFile)
+      );
+      const endLc = ts.getLineAndCharacterOfPosition(sourceFile, best.getEnd());
+      const start = new vscode.Position(startLc.line, startLc.character);
+      const end = new vscode.Position(endLc.line, endLc.character);
+
+      return new vscode.Location(
+        vscode.Uri.file(controllerPath),
+        new vscode.Range(start, end)
+      );
+    } catch (error) {
+      console.error(
+        "Failed to find method in controller file:",
+        controllerPath,
+        error
+      );
+      return null;
+    }
+  }
+
+  private findBestMethodNameNode(
+    sourceFile: ts.SourceFile,
+    methodName: string
+  ): ts.Identifier | null {
+    const candidates: { node: ts.Identifier; priority: number }[] = [];
+
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isMethodDeclaration(node) &&
+        node.name &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === methodName
+      ) {
+        let priority = 2;
+
+        let parent: ts.Node = node.parent;
+        while (parent) {
+          if (
+            ts.isClassDeclaration(parent) &&
+            parent.modifiers?.some(
+              (m) => m.kind === ts.SyntaxKind.ExportKeyword
+            ) &&
+            parent.modifiers?.some(
+              (m) => m.kind === ts.SyntaxKind.DefaultKeyword
+            )
+          ) {
+            priority = 1;
+            break;
+          }
+          if (ts.isClassDeclaration(parent)) {
+            priority = 2;
+            break;
+          }
+          parent = parent.parent;
+        }
+
+        candidates.push({ node: node.name, priority });
+      }
+
+      if (
+        ts.isPropertyDeclaration(node) &&
+        node.name &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === methodName
+      ) {
+        candidates.push({ node: node.name, priority: 2 });
+      }
+
+      if (
+        ts.isFunctionDeclaration(node) &&
+        node.name &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === methodName &&
+        node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+      ) {
+        candidates.push({ node: node.name, priority: 3 });
+      }
+
+      ts.forEachChild(node, visit);
+    };
+
+    visit(sourceFile);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a.priority - b.priority);
+    return candidates[0].node;
+  }
+
+  private resolveControllerFromImportPath(
+    importPath: string,
+    projectRoot: string
+  ): vscode.Location | null {
     const imports = this.getPackageImports(projectRoot);
     const mapping = imports[importPath];
     if (!mapping) return null;
 
     const resolvedPath = path.resolve(projectRoot, mapping);
     const possiblePaths = [
-      resolvedPath.replace('.js', '.ts'),
+      resolvedPath.replace(".js", ".ts"),
       resolvedPath,
-      resolvedPath.replace(/\.ts$/, '/index.ts'),
-      resolvedPath.replace(/\.js$/, '/index.js')
+      resolvedPath.replace(/\.ts$/, "/index.ts"),
+      resolvedPath.replace(/\.js$/, "/index.js"),
     ];
 
     for (const p of possiblePaths) {
       if (fs.existsSync(p)) {
-        return new vscode.Location(vscode.Uri.file(p), new vscode.Position(0, 0));
+        return new vscode.Location(
+          vscode.Uri.file(p),
+          new vscode.Position(0, 0)
+        );
       }
     }
 
     return null;
   }
 
-  private findControllerImportPath(variableName: string, sourceFile: ts.SourceFile): string | null {
+  private findControllerImportPath(
+    variableName: string,
+    sourceFile: ts.SourceFile
+  ): string | null {
     function visit(node: ts.Node): string | null {
       // Look for variable declarations
-      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === variableName) {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === variableName
+      ) {
         if (node.initializer) {
           // Handle arrow function: () => import('#controllers/...')
           if (ts.isArrowFunction(node.initializer) && node.initializer.body) {
             const body = node.initializer.body;
-            if (ts.isCallExpression(body) && ts.isIdentifier(body.expression) && body.expression.text === 'import') {
+            if (
+              ts.isCallExpression(body) &&
+              ts.isIdentifier(body.expression) &&
+              body.expression.text === "import"
+            ) {
               const args = body.arguments;
               if (args.length > 0 && ts.isStringLiteral(args[0])) {
                 return args[0].text;
@@ -525,7 +768,11 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
             }
           }
           // Handle direct import: import('#controllers/...')
-          else if (ts.isCallExpression(node.initializer) && ts.isIdentifier(node.initializer.expression) && node.initializer.expression.text === 'import') {
+          else if (
+            ts.isCallExpression(node.initializer) &&
+            ts.isIdentifier(node.initializer.expression) &&
+            node.initializer.expression.text === "import"
+          ) {
             const args = node.initializer.arguments;
             if (args.length > 0 && ts.isStringLiteral(args[0])) {
               return args[0].text;
@@ -541,20 +788,30 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     return visit(sourceFile);
   }
 
-  private resolveRoutesModule(moduleName: string, projectRoot: string, sourceFile: ts.SourceFile): vscode.Location | null {
+  private resolveRoutesModule(
+    moduleName: string,
+    projectRoot: string,
+    sourceFile: ts.SourceFile
+  ): vscode.Location | null {
     // First check if it's imported
     const imports = this.getPackageImports(projectRoot);
-    const routesMapping = imports['#routes/*'];
+    const routesMapping = imports["#routes/*"];
     if (routesMapping) {
-      const basePath = path.resolve(projectRoot, routesMapping.replace('/*', ''));
+      const basePath = path.resolve(
+        projectRoot,
+        routesMapping.replace("/*", "")
+      );
       const possiblePaths = [
         path.join(basePath, `${moduleName}.ts`),
-        path.join(basePath, `${moduleName}.js`)
+        path.join(basePath, `${moduleName}.js`),
       ];
 
       for (const p of possiblePaths) {
         if (fs.existsSync(p)) {
-          return new vscode.Location(vscode.Uri.file(p), new vscode.Position(0, 0));
+          return new vscode.Location(
+            vscode.Uri.file(p),
+            new vscode.Position(0, 0)
+          );
         }
       }
     }
@@ -563,7 +820,10 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     const currentDir = path.dirname(sourceFile.fileName);
     const localPath = path.join(currentDir, `${moduleName}.ts`);
     if (fs.existsSync(localPath)) {
-      return new vscode.Location(vscode.Uri.file(localPath), new vscode.Position(0, 0));
+      return new vscode.Location(
+        vscode.Uri.file(localPath),
+        new vscode.Position(0, 0)
+      );
     }
 
     return null;
@@ -571,7 +831,11 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
 }
 
 interface ClickContext {
-  type: 'controller_variable' | 'method_string' | 'controller_import_path' | 'routes_module';
+  type:
+    | "controller_variable"
+    | "method_string"
+    | "controller_import_path"
+    | "routes_module";
   variableName?: string;
   controllerName?: string;
   methodName?: string;
@@ -580,7 +844,7 @@ interface ClickContext {
 }
 
 interface HandlerInfo {
-  type: 'controller' | 'controller_variable';
+  type: "controller" | "controller_variable";
   controllerName?: string;
   variableName?: string;
   methodName?: string;

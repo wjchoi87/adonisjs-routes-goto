@@ -50,3 +50,5 @@ Thumbs.db
 *.temp
 
 *.prompt.md
+tsup.config.js
+tsup.config.js.map

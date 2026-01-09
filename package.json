@@ -18,12 +18,15 @@
     "onLanguage:typescript"
   ],
   "main": "./dist/extension.js",
+  "imports": {
+    "#controllers/*": "./app/controllers/*.js"
+  },
   "scripts": {
-    "vscode:prepublish": "npm run compile && npm run webpack",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "webpack": "webpack --mode production",
-    "pretest": "npm run compile && npm run lint",
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsup --minify",
+    "watch": "tsup --watch --sourcemap",
+    "package": "vsce package",
+    "pretest": "tsc -p ./ && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
   },
@@ -37,6 +40,7 @@
     "@typescript-eslint/parser": "^5.42.0",
     "eslint": "^8.28.0",
     "ts-loader": "^9.5.4",
+    "tsup": "^8.5.1",
     "typescript": "^4.9.3",
     "webpack": "^5.104.1",
     "webpack-cli": "^6.0.1"
