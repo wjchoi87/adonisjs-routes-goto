@@ -113,8 +113,8 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
       const handler = this.extractHandlerFromRouterCall(routerCall);
       if (handler && handler.type === 'controller') {
         return {
-          type: 'controller_identifier',
-          controllerName: handler.controllerName,
+          type: 'controller_variable',
+          variableName: handler.controllerName,
           methodName: handler.methodName
         };
       }
@@ -251,65 +251,167 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
   }
 
   private resolveDefinition(context: ClickContext, projectRoot: string, sourceFile: ts.SourceFile): vscode.Location | null {
+    console.log('Resolving definition for context:', context);
+
     switch (context.type) {
-      case 'controller_identifier':
-        if (!context.controllerName) return null;
-        return this.resolveControllerDefinition(context.controllerName, context.methodName, projectRoot);
+      case 'controller_variable':
+        if (!context.variableName) {
+          console.log('No variable name for controller variable');
+          return null;
+        }
+        console.log('Resolving controller variable definition...');
+        return this.resolveControllerVariableDefinition(context.variableName, context.methodName, projectRoot, sourceFile);
 
       case 'method_string':
-        if (!context.controllerName) return null;
+        if (!context.controllerName) {
+          console.log('No controller name for method string');
+          return null;
+        }
+        console.log('Resolving method string definition...');
         return this.resolveControllerDefinition(context.controllerName, context.methodName, projectRoot);
 
       case 'controller_import_path':
-        if (!context.importPath) return null;
+        if (!context.importPath) {
+          console.log('No import path');
+          return null;
+        }
+        console.log('Resolving controller import path...');
         return this.resolveControllerFromImportPath(context.importPath, projectRoot);
 
       case 'routes_module':
-        if (!context.moduleName) return null;
+        if (!context.moduleName) {
+          console.log('No module name');
+          return null;
+        }
+        console.log('Resolving routes module...');
         return this.resolveRoutesModule(context.moduleName, projectRoot, sourceFile);
 
       default:
+        console.log('Unknown context type:', context.type);
         return null;
     }
   }
 
+  private resolveControllerVariableDefinition(variableName: string, methodName: string | undefined, projectRoot: string, sourceFile: ts.SourceFile): vscode.Location | null {
+    console.log(`Resolving controller variable: ${variableName}, method: ${methodName}`);
+
+    // Find the variable declaration in the source file
+    const importPath = this.findControllerImportPath(variableName, sourceFile);
+    console.log('Import path found:', importPath);
+
+    if (!importPath) {
+      console.log('No import path found for variable');
+      return null;
+    }
+
+    // Resolve the import path to actual file path
+    const location = this.resolveControllerFromImportPath(importPath, projectRoot);
+    if (!location) {
+      console.log('Controller path not found');
+      return null;
+    }
+
+    // Extract file path from location
+    const controllerPath = location.uri.fsPath;
+    const controllerDocument = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === controllerPath);
+    console.log('Controller document found:', !!controllerDocument);
+
+    if (!controllerDocument) return location;
+
+    if (!methodName) {
+      console.log('No method name specified, returning controller file location');
+      return new vscode.Location(location.uri, new vscode.Position(0, 0));
+    }
+
+    // Find method definition
+    console.log('Finding method in controller...');
+    const methodLocation = this.findMethodInController(controllerDocument, methodName);
+    console.log('Method location found:', !!methodLocation);
+
+    return methodLocation || new vscode.Location(location.uri, new vscode.Position(0, 0));
+  }
+
   private resolveControllerDefinition(controllerName: string, methodName: string | undefined, projectRoot: string): vscode.Location | null {
+    console.log(`Resolving controller: ${controllerName}, method: ${methodName}, root: ${projectRoot}`);
+
     const controllerPath = this.resolveControllerPath(controllerName, projectRoot);
-    if (!controllerPath) return null;
+    console.log('Controller path resolved to:', controllerPath);
+
+    if (!controllerPath) {
+      console.log('Controller path not found');
+      return null;
+    }
 
     const controllerUri = vscode.Uri.file(controllerPath);
     const controllerDocument = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === controllerPath);
+    console.log('Controller document found:', !!controllerDocument);
 
     if (!controllerDocument) return new vscode.Location(controllerUri, new vscode.Position(0, 0));
 
     if (!methodName) {
+      console.log('No method name specified, returning controller file location');
       return new vscode.Location(controllerUri, new vscode.Position(0, 0));
     }
 
     // Find method definition
+    console.log('Finding method in controller...');
     const methodLocation = this.findMethodInController(controllerDocument, methodName);
+    console.log('Method location found:', !!methodLocation);
+
     return methodLocation || new vscode.Location(controllerUri, new vscode.Position(0, 0));
   }
 
   private resolveControllerPath(controllerName: string, projectRoot: string): string | null {
-    const imports = this.getPackageImports(projectRoot);
-    const controllersMapping = imports['#controllers/*'];
-    if (!controllersMapping) return null;
+    console.log(`Resolving controller path for: ${controllerName}`);
 
-    const basePath = path.resolve(projectRoot, controllersMapping.replace('/*', ''));
+    const imports = this.getPackageImports(projectRoot);
+    console.log('Package imports:', imports);
+
+    const controllersMapping = imports['#controllers/*'];
+    console.log('Controllers mapping:', controllersMapping);
+
+    if (!controllersMapping) {
+      console.log('No #controllers/* mapping found');
+      return null;
+    }
+
+    // Handle mappings like './app/controllers/*.js' -> './app/controllers'
+    let mappingPath = controllersMapping;
+    // First remove the /* pattern
+    if (mappingPath.includes('/*')) {
+      mappingPath = mappingPath.replace('/*', '');
+    }
+    // Then remove any remaining * patterns (like *.js)
+    mappingPath = mappingPath.replace(/\*\.[a-zA-Z0-9]+$/, '');
+
+    const basePath = path.resolve(projectRoot, mappingPath);
+    console.log('Base path:', basePath);
+
+    // Convert PascalCase to snake_case (e.g., BannerController -> banner_controller)
+    const snakeCaseName = controllerName.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+    console.log('Converted to snake_case:', snakeCaseName);
+
     const possiblePaths = [
-      path.join(basePath, `${controllerName}.ts`),
-      path.join(basePath, `${controllerName}.js`),
+      path.join(basePath, `${snakeCaseName}.ts`),
+      path.join(basePath, `${snakeCaseName}.js`),
       path.join(basePath, controllerName, 'index.ts'),
-      path.join(basePath, controllerName, 'index.js')
+      path.join(basePath, controllerName, 'index.js'),
+      // Also try PascalCase just in case
+      path.join(basePath, `${controllerName}.ts`),
+      path.join(basePath, `${controllerName}.js`)
     ];
 
+    console.log('Possible paths:', possiblePaths);
+
     for (const p of possiblePaths) {
+      console.log(`Checking path: ${p}, exists: ${fs.existsSync(p)}`);
       if (fs.existsSync(p)) {
+        console.log('Found controller file:', p);
         return p;
       }
     }
 
+    console.log('No controller file found');
     return null;
   }
 
@@ -407,6 +509,38 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
     return null;
   }
 
+  private findControllerImportPath(variableName: string, sourceFile: ts.SourceFile): string | null {
+    function visit(node: ts.Node): string | null {
+      // Look for variable declarations
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === variableName) {
+        if (node.initializer) {
+          // Handle arrow function: () => import('#controllers/...')
+          if (ts.isArrowFunction(node.initializer) && node.initializer.body) {
+            const body = node.initializer.body;
+            if (ts.isCallExpression(body) && ts.isIdentifier(body.expression) && body.expression.text === 'import') {
+              const args = body.arguments;
+              if (args.length > 0 && ts.isStringLiteral(args[0])) {
+                return args[0].text;
+              }
+            }
+          }
+          // Handle direct import: import('#controllers/...')
+          else if (ts.isCallExpression(node.initializer) && ts.isIdentifier(node.initializer.expression) && node.initializer.expression.text === 'import') {
+            const args = node.initializer.arguments;
+            if (args.length > 0 && ts.isStringLiteral(args[0])) {
+              return args[0].text;
+            }
+          }
+        }
+      }
+
+      // Continue searching
+      return ts.forEachChild(node, visit) || null;
+    }
+
+    return visit(sourceFile);
+  }
+
   private resolveRoutesModule(moduleName: string, projectRoot: string, sourceFile: ts.SourceFile): vscode.Location | null {
     // First check if it's imported
     const imports = this.getPackageImports(projectRoot);
@@ -437,7 +571,8 @@ export class AdonisRoutesDefinitionProvider implements vscode.DefinitionProvider
 }
 
 interface ClickContext {
-  type: 'controller_identifier' | 'method_string' | 'controller_import_path' | 'routes_module';
+  type: 'controller_variable' | 'method_string' | 'controller_import_path' | 'routes_module';
+  variableName?: string;
   controllerName?: string;
   methodName?: string;
   importPath?: string;
