@@ -48,3 +48,5 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+*.prompt.md
