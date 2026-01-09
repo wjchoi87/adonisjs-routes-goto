@@ -60,11 +60,46 @@ export class AdonisRoutesDefinitionProvider
       }
 
       console.log("Resolving definition...");
-      return this.resolveDefinition(clickContext, projectRoot, sourceFile);
+      const resolved = this.resolveDefinition(
+        clickContext,
+        projectRoot,
+        sourceFile
+      );
+
+      // When clicking controller variables, TypeScript's built-in definition provider will also return
+      // the variable declaration. Return a LocationLink with an originSelectionRange to help VS Code
+      // prioritize our more meaningful target.
+      if (resolved && clickContext.type === "controller_variable") {
+        const originSelectionRange = this.getNodeRange(
+          document,
+          sourceFile,
+          node
+        );
+        return [
+          {
+            originSelectionRange,
+            targetUri: resolved.uri,
+            targetRange: resolved.range,
+            targetSelectionRange: resolved.range,
+          },
+        ];
+      }
+
+      return resolved;
     } catch (error) {
       console.error("AdonisJS Routes Goto Error:", error);
       return null;
     }
+  }
+
+  private getNodeRange(
+    document: vscode.TextDocument,
+    sourceFile: ts.SourceFile,
+    node: ts.Node
+  ): vscode.Range {
+    const start = document.positionAt(node.getStart(sourceFile));
+    const end = document.positionAt(node.getEnd());
+    return new vscode.Range(start, end);
   }
 
   private isSupportedFile(filePath: string): boolean {
@@ -129,12 +164,28 @@ export class AdonisRoutesDefinitionProvider
     const routerCall = this.findRouterCall(node);
     if (routerCall) {
       const handler = this.extractHandlerFromRouterCall(routerCall);
-      if (handler && handler.type === "controller") {
-        return {
-          type: "controller_variable",
-          variableName: handler.controllerName,
-          methodName: handler.methodName,
-        };
+      if (handler) {
+        if (handler.type === "controller_variable" && handler.variableName) {
+          return {
+            type: "controller_variable",
+            variableName: handler.variableName,
+          };
+        }
+
+        // Note: handler.type === 'controller' is handled primarily via clicking the method string.
+        // If clicking the first element in a tuple handler: [ControllerVar, 'method']
+        // Prefer resolving ControllerVar to the imported controller file (not the variable declaration).
+        if (
+          ts.isArrayLiteralExpression(node.parent) &&
+          node.parent.elements.length === 2 &&
+          node.parent.elements[0] === node &&
+          ts.isStringLiteral(node.parent.elements[1])
+        ) {
+          return {
+            type: "controller_variable",
+            variableName: node.text,
+          };
+        }
       }
     }
 
@@ -473,12 +524,12 @@ export class AdonisRoutesDefinitionProvider
       return null;
     }
 
-    let mappingPath = controllersMapping;
-    if (mappingPath.includes("/*")) {
-      mappingPath = mappingPath.substring(0, mappingPath.indexOf("/*"));
-    }
-
-    const basePath = path.resolve(projectRoot, mappingPath);
+    // The import map often points to "./app/controllers/*.js" even though the source is ".ts".
+    // Use the mapping's directory as the base path.
+    const basePath = path.resolve(
+      projectRoot,
+      path.dirname(String(controllersMapping))
+    );
     console.log("Base path:", basePath);
 
     // Convert PascalCase to snake_case (e.g., BannerController -> banner_controller)
@@ -719,22 +770,76 @@ export class AdonisRoutesDefinitionProvider
   ): vscode.Location | null {
     const imports = this.getPackageImports(projectRoot);
     const mapping = imports[importPath];
-    if (!mapping) return null;
 
-    const resolvedPath = path.resolve(projectRoot, mapping);
-    const possiblePaths = [
-      resolvedPath.replace(".js", ".ts"),
-      resolvedPath,
-      resolvedPath.replace(/\.ts$/, "/index.ts"),
-      resolvedPath.replace(/\.js$/, "/index.js"),
-    ];
+    // 1) Exact mapping in package.json imports
+    if (mapping) {
+      const resolvedPath = path.resolve(projectRoot, mapping);
+      const possiblePaths = [
+        resolvedPath.replace(".js", ".ts"),
+        resolvedPath,
+        resolvedPath.replace(/\.ts$/, "/index.ts"),
+        resolvedPath.replace(/\.js$/, "/index.js"),
+      ];
 
-    for (const p of possiblePaths) {
-      if (fs.existsSync(p)) {
-        return new vscode.Location(
-          vscode.Uri.file(p),
-          new vscode.Position(0, 0)
-        );
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          return new vscode.Location(
+            vscode.Uri.file(p),
+            new vscode.Position(0, 0)
+          );
+        }
+      }
+
+      return null;
+    }
+
+    // 2) Wildcard mapping like "#controllers/*": "./app/controllers/*.js"
+    if (importPath.startsWith("#controllers/")) {
+      const controllersMapping = imports["#controllers/*"];
+      if (!controllersMapping) return null;
+      const controllerModule = importPath.substring("#controllers/".length);
+
+      const mappingPattern = String(controllersMapping);
+
+      // If mapping contains a "*" pattern (e.g. ./app/controllers/*.js), replace it with the module.
+      if (mappingPattern.includes("*")) {
+        const mapped = mappingPattern.replace("*", controllerModule);
+        const resolvedPath = path.resolve(projectRoot, mapped);
+        const candidates = [
+          resolvedPath.replace(".js", ".ts"),
+          resolvedPath,
+          resolvedPath.replace(/\.ts$/, "/index.ts"),
+          resolvedPath.replace(/\.js$/, "/index.js"),
+        ];
+
+        for (const p of candidates) {
+          if (fs.existsSync(p)) {
+            return new vscode.Location(
+              vscode.Uri.file(p),
+              new vscode.Position(0, 0)
+            );
+          }
+        }
+
+        return null;
+      }
+
+      // Fallback: treat the mapping as a directory-ish base
+      const basePath = path.resolve(projectRoot, path.dirname(mappingPattern));
+      const candidates = [
+        path.join(basePath, `${controllerModule}.ts`),
+        path.join(basePath, `${controllerModule}.js`),
+        path.join(basePath, controllerModule, "index.ts"),
+        path.join(basePath, controllerModule, "index.js"),
+      ];
+
+      for (const p of candidates) {
+        if (fs.existsSync(p)) {
+          return new vscode.Location(
+            vscode.Uri.file(p),
+            new vscode.Position(0, 0)
+          );
+        }
       }
     }
 
@@ -758,8 +863,7 @@ export class AdonisRoutesDefinitionProvider
             const body = node.initializer.body;
             if (
               ts.isCallExpression(body) &&
-              ts.isIdentifier(body.expression) &&
-              body.expression.text === "import"
+              body.expression.kind === ts.SyntaxKind.ImportKeyword
             ) {
               const args = body.arguments;
               if (args.length > 0 && ts.isStringLiteral(args[0])) {
@@ -770,8 +874,7 @@ export class AdonisRoutesDefinitionProvider
           // Handle direct import: import('#controllers/...')
           else if (
             ts.isCallExpression(node.initializer) &&
-            ts.isIdentifier(node.initializer.expression) &&
-            node.initializer.expression.text === "import"
+            node.initializer.expression.kind === ts.SyntaxKind.ImportKeyword
           ) {
             const args = node.initializer.arguments;
             if (args.length > 0 && ts.isStringLiteral(args[0])) {
