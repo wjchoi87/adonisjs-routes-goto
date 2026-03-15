@@ -377,7 +377,8 @@ export class AdonisRoutesDefinitionProvider
         return this.resolveControllerDefinition(
           context.controllerName,
           context.methodName,
-          projectRoot
+          projectRoot,
+          sourceFile
         );
 
       case "controller_import_path":
@@ -468,11 +469,32 @@ export class AdonisRoutesDefinitionProvider
   private resolveControllerDefinition(
     controllerName: string,
     methodName: string | undefined,
-    projectRoot: string
+    projectRoot: string,
+    sourceFile?: ts.SourceFile
   ): vscode.Location | null {
     console.log(
       `Resolving controller: ${controllerName}, method: ${methodName}, root: ${projectRoot}`
     );
+
+    // Try import path resolution first (supports subdirectory controllers)
+    if (sourceFile) {
+      console.log("Trying import path resolution for method_string...");
+      const importPath = this.findControllerImportPath(controllerName, sourceFile);
+      console.log("Import path found:", importPath);
+      if (importPath) {
+        const location = this.resolveControllerFromImportPath(importPath, projectRoot);
+        console.log("Controller resolved from import path:", location?.uri.fsPath);
+        if (location) {
+          const controllerPath = location.uri.fsPath;
+          if (!methodName) {
+            return new vscode.Location(location.uri, new vscode.Position(0, 0));
+          }
+          const methodLocation = this.findMethodInControllerFile(controllerPath, methodName);
+          return methodLocation || new vscode.Location(location.uri, new vscode.Position(0, 0));
+        }
+      }
+    }
+    // Fallback: resolve by controller name (PascalCase → snake_case)
 
     const controllerPath = this.resolveControllerPath(
       controllerName,
