@@ -2,7 +2,7 @@
   "name": "adonisjs-routes-goto",
   "displayName": "AdonisJS Routes Goto",
   "description": "Go to Definition for AdonisJS v6 routes",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "wjchoi87",
   "repository": {
     "type": "git",
